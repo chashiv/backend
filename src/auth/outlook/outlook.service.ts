@@ -1,11 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AUTHORISATION_BASE_URL, GRANT_TYPE_ENUM, PERMISSIONS } from './outlook.enum';
+import {
+  PERMISSIONS,
+  GRANT_TYPE_ENUM,
+  AUTHORISATION_BASE_URL,
+  MICROSOFT_GRAPH_BASE_URL,
+} from './outlook.enum';
 import { generateId } from 'src/utils';
 import { LoggingService } from 'src/logger/logging.service';
-import axios from 'axios';
 import { ElasticService } from 'src/elastic/elastic.service';
-import { url } from 'inspector';
+import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class OutlookService {
@@ -44,12 +49,12 @@ export class OutlookService {
       const tokenDetailsResponse = await axios.post(
         this.getTokenurl(),
         {
-          client_id: this.client_id,
-          client_secret: this.client_secret,
-          redirect_uri: this.redirect_url,
-          grant_type: GRANT_TYPE_ENUM.AUHTORISATION_CODE,
           code: code,
           scope: PERMISSIONS,
+          client_id: this.client_id,
+          redirect_uri: this.redirect_url,
+          client_secret: this.client_secret,
+          grant_type: GRANT_TYPE_ENUM.AUHTORISATION_CODE,
         },
         {
           headers: {
@@ -66,17 +71,44 @@ export class OutlookService {
 
   async authenticate() {
     const url = this.getAuthroisationUrl();
-    await this.elasticsearchSerivce.insert('test', { url });
     return { url };
+  }
+
+  private async saveUserDetails(userDetails) {
+    try {
+      await this.elasticsearchSerivce.insert('users', userDetails, 'users', uuidv4());
+    } catch (error) {
+      this.loggingService.logError(error.message, error);
+    }
+  }
+
+  private async getUserDetailsAndSave(tokenDetails) {
+    try {
+      const token = tokenDetails?.access_token;
+      const url = `${MICROSOFT_GRAPH_BASE_URL}/v1.0/me`;
+      const userDetails = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      await this.saveUserDetails({ ...userDetails.data, ...tokenDetails });
+      return userDetails.data;
+    } catch (error) {}
   }
 
   async handleCallback(req) {
     const { code } = req.query;
     const tokenDetails = await this.getTokenDetails(code);
-    return tokenDetails;
+    const userDetails = await this.getUserDetailsAndSave(tokenDetails);
+    return userDetails;
   }
 
-  async handleChangesNotification(req) {
+  async handleChangesNotification() {
+    /*
+        Unable to create subscription using localhost
+        This method can be used to handle change event that microsoft graph api's send
+        We can use this to update mails from unread to read for instance
+     */
     return { msg: 'handleChangesNotification called', status: 200 };
   }
 }

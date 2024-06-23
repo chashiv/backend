@@ -18,7 +18,7 @@ export class OutlookController {
   @Get('handleChangesNotification')
   async handleChangesNotification(@Req() req, @Res() res) {
     try {
-      const response = await this.outlookService.handleChangesNotification(req);
+      const response = await this.outlookService.handleChangesNotification();
       res.status(200).json(response);
     } catch (error) {
       res.status(500).json({ error });

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Document } from './elastic.interface';
 import * as elasticsearch from 'elasticsearch';
 import { ConfigService } from '@nestjs/config';
+import { Uuid } from '@elastic/elasticsearch/lib/api/types';
 
 @Injectable()
 export class ElasticService {
@@ -21,8 +22,8 @@ export class ElasticService {
     await this.esclient.bulk({ body: processedDocuments });
   }
 
-  async insert(index: string, document: Document) {
-    await this.esclient.index({ index, body: document, type: 'test' });
+  async insert(index: string, document: Document, type: string, id: Uuid) {
+    await this.esclient.index({ index, body: document, type, id: id });
   }
 
   async search(index: string, text: string) {
