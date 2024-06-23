@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  flashmail_backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: flashmail_backend
+    container_name: flashmail_backend
+    ports:
+      - '8000:8000'
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    depends_on:
+      - es01
+
+  es01:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.9.1
+    container_name: es01
+    environment:
+      - node.name=es01
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=es01
+      - cluster.initial_master_nodes=es01
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - data01:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200        
+volumes:
+  data01:
+

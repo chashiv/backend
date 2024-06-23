@@ -21,7 +21,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { httpsOptions });
 
   await app.listen(8000, () => {
-    console.log('Nest application is listening on https://localhost:3000');
+    console.log('Nest application is listening on https://localhost:8000');
   });
 }
 bootstrap();

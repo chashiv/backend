@@ -4,6 +4,8 @@ import { AUTHORISATION_BASE_URL, GRANT_TYPE_ENUM, PERMISSIONS } from './outlook.
 import { generateId } from 'src/utils';
 import { LoggingService } from 'src/logger/logging.service';
 import axios from 'axios';
+import { ElasticService } from 'src/elastic/elastic.service';
+import { url } from 'inspector';
 
 @Injectable()
 export class OutlookService {
@@ -14,6 +16,7 @@ export class OutlookService {
   constructor(
     private configService: ConfigService,
     private loggingService: LoggingService,
+    private elasticsearchSerivce: ElasticService,
   ) {
     this.client_id = this.configService.getOrThrow<string>('OUTLOOK_CLIENT_ID');
     this.client_secret = this.configService.getOrThrow<string>('OUTLOOK_CLIENT_SECRET');
@@ -62,7 +65,9 @@ export class OutlookService {
   }
 
   async authenticate() {
-    return { url: this.getAuthroisationUrl() };
+    const url = this.getAuthroisationUrl();
+    await this.elasticsearchSerivce.insert('test', { url });
+    return { url };
   }
 
   async handleCallback(req) {
@@ -72,6 +77,6 @@ export class OutlookService {
   }
 
   async handleChangesNotification(req) {
-    return { msg: 'event_handled', status: 200 };
+    return { msg: 'handleChangesNotification called', status: 200 };
   }
 }

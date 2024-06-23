@@ -3,7 +3,7 @@ import { OutlookService } from './outlook/outlook.service';
 import { ProviderEnum } from './auth.enum';
 import { LoggingService } from 'src/logger/logging.service';
 import { AuthError } from './auth.error';
-import { IAuthenticate } from './auth.interfact';
+import { IAuthenticate } from './auth.interface';
 
 @Injectable()
 export class AuthService {
