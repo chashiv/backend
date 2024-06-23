@@ -6,3 +6,7 @@ export enum GRANT_TYPE_ENUM {
 }
 
 export const PERMISSIONS = 'User.Read User.ReadBasic.All Mail.ReadBasic';
+
+export enum MESSAGES {
+  PLEASE_LOGIN_AGAIN = 'Please login again',
+}

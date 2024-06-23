@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  MESSAGES,
   PERMISSIONS,
   GRANT_TYPE_ENUM,
   AUTHORISATION_BASE_URL,
@@ -45,28 +46,23 @@ export class OutlookService {
   }
 
   private async getTokenDetails(code: string) {
-    try {
-      const tokenDetailsResponse = await axios.post(
-        this.getTokenurl(),
-        {
-          code: code,
-          scope: PERMISSIONS,
-          client_id: this.client_id,
-          redirect_uri: this.redirect_url,
-          client_secret: this.client_secret,
-          grant_type: GRANT_TYPE_ENUM.AUHTORISATION_CODE,
+    const tokenDetailsResponse = await axios.post(
+      this.getTokenurl(),
+      {
+        code: code,
+        scope: PERMISSIONS,
+        client_id: this.client_id,
+        redirect_uri: this.redirect_url,
+        client_secret: this.client_secret,
+        grant_type: GRANT_TYPE_ENUM.AUHTORISATION_CODE,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        },
-      );
-      return tokenDetailsResponse.data;
-    } catch (error) {
-      error = error.response.data || error;
-      this.loggingService.logError(error.error_description, error);
-    }
+      },
+    );
+    return tokenDetailsResponse.data;
   }
 
   async authenticate() {
@@ -75,25 +71,19 @@ export class OutlookService {
   }
 
   private async saveUserDetails(userDetails) {
-    try {
-      await this.elasticsearchSerivce.insert('users', userDetails, 'users', uuidv4());
-    } catch (error) {
-      this.loggingService.logError(error.message, error);
-    }
+    await this.elasticsearchSerivce.insert('users', userDetails, uuidv4());
   }
 
   private async getUserDetailsAndSave(tokenDetails) {
-    try {
-      const token = tokenDetails?.access_token;
-      const url = `${MICROSOFT_GRAPH_BASE_URL}/v1.0/me`;
-      const userDetails = await axios.get(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      await this.saveUserDetails({ ...userDetails.data, ...tokenDetails });
-      return userDetails.data;
-    } catch (error) {}
+    const token = tokenDetails?.access_token;
+    const url = `${MICROSOFT_GRAPH_BASE_URL}/v1.0/me`;
+    const userDetails = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    await this.saveUserDetails({ ...userDetails.data, ...tokenDetails });
+    return userDetails.data;
   }
 
   async handleCallback(req) {
@@ -103,12 +93,38 @@ export class OutlookService {
     return userDetails;
   }
 
-  async handleChangesNotification() {
+  async handleChangeNotification() {
     /*
         Unable to create subscription using localhost
         This method can be used to handle change event that microsoft graph api's send
         We can use this to update mails from unread to read for instance
      */
-    return { msg: 'handleChangesNotification called', status: 200 };
+    return { msg: 'handleChangeNotification called', status: 200 };
+  }
+
+  async listMails(email: string) {
+    let userDetails;
+    try {
+      userDetails = await this.elasticsearchSerivce.search('users', email);
+      if (userDetails && userDetails.length) {
+        const user = userDetails[0]?._source;
+        const emails = await axios.get(`${MICROSOFT_GRAPH_BASE_URL}/v1.0/me/messages`, {
+          params: {
+            count: true,
+          },
+          headers: {
+            Authorization: `Bearer ${user['access_token']}`,
+          },
+        });
+        return emails.data;
+      }
+      return { status: HttpStatus.OK, message: MESSAGES.PLEASE_LOGIN_AGAIN };
+    } catch (error) {
+      if (userDetails?.length) {
+        await this.elasticsearchSerivce.delete('users', userDetails[0]?.['_id']);
+      }
+      this.loggingService.logError(error.message, error);
+      throw new HttpException('Please Login Again', HttpStatus.BAD_REQUEST);
+    }
   }
 }

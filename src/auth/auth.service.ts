@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { OutlookService } from './outlook/outlook.service';
 import { ProviderEnum } from './auth.enum';
 import { LoggingService } from 'src/logger/logging.service';
@@ -13,16 +13,11 @@ export class AuthService {
   ) {}
 
   async authenticate(payload: IAuthenticate) {
-    try {
-      switch (payload.provider) {
-        case ProviderEnum.OUTLOOK:
-          return await this.outlookService.authenticate();
-        default:
-          throw new Error(AuthError.AUTH01);
-      }
-    } catch (error) {
-      this.loggingService.logError(error.message, error);
-      return { error: error.message };
+    switch (payload.provider) {
+      case ProviderEnum.OUTLOOK:
+        return await this.outlookService.authenticate();
+      default:
+        throw new HttpException(AuthError.UNINTEGRATED_PROVIDER, HttpStatus.BAD_REQUEST);
     }
   }
 }

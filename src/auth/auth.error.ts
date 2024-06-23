@@ -1,3 +1,3 @@
 export const AuthError = {
-  AUTH01: 'Unintegrated provider',
+  UNINTEGRATED_PROVIDER: 'Unintegrated provider',
 };

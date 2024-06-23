@@ -3,13 +3,17 @@ import { Document } from './elastic.interface';
 import * as elasticsearch from 'elasticsearch';
 import { ConfigService } from '@nestjs/config';
 import { Uuid } from '@elastic/elasticsearch/lib/api/types';
+import axios from 'axios';
 
 @Injectable()
 export class ElasticService {
   private readonly esclient: elasticsearch.Client;
+  private readonly elasticSearchUrl: string;
+
   constructor(private configService: ConfigService) {
+    this.elasticSearchUrl = this.configService.getOrThrow<string>('ELASTIC_SEARCH_URL');
     this.esclient = new elasticsearch.Client({
-      host: this.configService.getOrThrow<string>('ELASTIC_SEARCH_URL'),
+      host: this.elasticSearchUrl,
     });
   }
 
@@ -22,8 +26,26 @@ export class ElasticService {
     await this.esclient.bulk({ body: processedDocuments });
   }
 
-  async insert(index: string, document: Document, type: string, id: Uuid) {
-    await this.esclient.index({ index, body: document, type, id: id });
+  async insert(index: string, document: Document, id: Uuid) {
+    await axios.put(
+      `${this.elasticSearchUrl}/${index}/_create/${id}`,
+      {
+        ...document,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+  }
+
+  async delete(index: string, id: Uuid) {
+    try {
+      console.log(index, id);
+      const response = await axios.delete(`${this.elasticSearchUrl}/${index}/_doc/${id}`);
+      console.log(response);
+    } catch (error) {}
   }
 
   async search(index: string, text: string) {
@@ -31,13 +53,12 @@ export class ElasticService {
       index,
       body: {
         query: {
-          multi_match: {
-            query: text,
-            fields: ['email', 'surname'],
+          bool: {
+            should: [{ term: { userPrincipalName: text } }, { term: { mail: text } }],
           },
         },
       },
     });
-    return response;
+    return response?.hits?.hits;
   }
 }
