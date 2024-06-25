@@ -9,8 +9,9 @@ import * as moment from 'moment';
 import { MESSAGES } from './outlook.enum';
 import { ElasticService } from 'src/elastic/elastic.service';
 import { UtilService } from 'src/common/util/util.service';
-import { IGenericMailFolderResponse } from 'src/mail/mail.interface';
-import { OutlookMailFoldersResponse } from './outlook.interface';
+import { IGenericEmailListResponse, IGenericMailFolderResponse } from 'src/mail/mail.interface';
+import { IOutlookEmailListResponse, IOutlookMailFoldersResponse } from './outlook.interface';
+import { Document } from 'src/elastic/elastic.interface';
 
 @Injectable()
 export class OutlookService {
@@ -32,7 +33,7 @@ export class OutlookService {
     this.clientSecret = this.configService.getOrThrow<string>('OUTLOOK_CLIENT_SECRET');
   }
 
-  private parseUserResponse(userDetails): IUser {
+  private getParsedUserResponse(userDetails): IUser {
     return {
       userId: uuidv4(),
       id: userDetails.id,
@@ -55,20 +56,54 @@ export class OutlookService {
     return `${this.outlook}-${userId}-${suffix}`;
   };
 
-  private parseMailFolderResponse = (mailFolderResponse: OutlookMailFoldersResponse) => {
-    const mailFoldersByIdAndName: Record<string, any> = {};
+  private getParsedMailFoldersResponse = (
+    mailFolderResponse: IOutlookMailFoldersResponse,
+  ): IGenericMailFolderResponse => {
+    const parsedMailFoldersResponse: IGenericMailFolderResponse = {};
     mailFolderResponse.value.forEach((response) => {
-      mailFoldersByIdAndName[this.utilService.shortenString(response.id)] = response?.displayName;
+      parsedMailFoldersResponse[this.utilService.shortenString(response.id)] = response?.displayName;
     });
-    return mailFoldersByIdAndName;
+    return parsedMailFoldersResponse;
   };
 
-  private async syncMaileFolderResponse(
-    parsedMailFolderResponse: IGenericMailFolderResponse,
+  private getMailFoldersIdMap = async (userId: string) => {
+    const userIndex = this.getIndex(userId, 'folders');
+    const folderIdNameMap = await this.elasticSearchService.search(userIndex);
+    return folderIdNameMap.length ? folderIdNameMap[0]._source : null;
+  };
+
+  private getParsedEmailListResponse = async (
+    emailListResponse: IOutlookEmailListResponse,
+    folderIdNameMap: IGenericMailFolderResponse,
+  ): Promise<IGenericEmailListResponse> => {
+    const parsedEmailListResponse: IGenericEmailListResponse = [];
+    emailListResponse.value.forEach((response) => {
+      const shortenedFolderId = this.utilService.shortenString(response.parentFolderId);
+      parsedEmailListResponse.push({
+        id: this.utilService.shortenString(response.id),
+        subject: response?.subject,
+        folderId: shortenedFolderId,
+        folderName: folderIdNameMap[shortenedFolderId],
+        sender: response?.sender?.emailAddress?.address,
+        receiver: response?.toRecipients?.[0]?.emailAddress?.name,
+        originalFolderId: response?.parentFolderId,
+      });
+    });
+    return parsedEmailListResponse;
+  };
+
+  private async syncParsedResponse(
+    parsedResponse: IGenericMailFolderResponse,
     userId: string,
+    suffix: string,
   ) {
-    const userIdIndex = this.getIndex(userId, 'folders');
-    await this.elasticSearchService.insert(userIdIndex, parsedMailFolderResponse, userId);
+    const userIdIndex = this.getIndex(userId, suffix);
+    await this.elasticSearchService.update(
+      userIdIndex,
+      userId,
+      parsedResponse as unknown as Document,
+      parsedResponse as unknown as Document,
+    );
   }
 
   async authenticate() {
@@ -86,7 +121,7 @@ export class OutlookService {
     );
     const userDetails = await this.outlookBundleApis.getSignedInUserDetails(tokenDetails?.access_token);
     if (userDetails) {
-      await this.userEntity.saveUser(this.parseUserResponse({ ...userDetails, ...tokenDetails }));
+      await this.userEntity.saveUser(this.getParsedUserResponse({ ...userDetails, ...tokenDetails }));
     }
     return userDetails;
   }
@@ -106,8 +141,38 @@ export class OutlookService {
       userDetails = (await this.userEntity.getUserByEmail(email)) as unknown as IUser;
       if (userDetails) {
         const token = userDetails.accessToken;
-        const emailsList = await this.outlookBundleApis.listMails(token);
-        return emailsList;
+
+        let count = true;
+        let nextUrl: string = null;
+
+        const mailFolderIdMap = await this.getMailFoldersIdMap(userDetails.id);
+
+        while ((nextUrl || count) && mailFolderIdMap) {
+          const emailListResponse: IOutlookEmailListResponse = await this.outlookBundleApis.listMails(
+            token,
+            count,
+            nextUrl,
+          );
+          if (emailListResponse.value.length) {
+            const parsedEmailListResponse: IGenericEmailListResponse =
+              await this.getParsedEmailListResponse(
+                emailListResponse,
+                mailFolderIdMap as IGenericMailFolderResponse,
+              );
+
+            await this.elasticSearchService.bulkInsert(
+              this.getIndex(userDetails.id, 'mails'),
+              parsedEmailListResponse as unknown as Document[],
+            );
+
+            nextUrl = emailListResponse?.['@odata.nextLink'];
+            if (nextUrl) {
+              count = false;
+            }
+          } else {
+            nextUrl = null;
+          }
+        }
       }
       return { message: MESSAGES.PLEASE_LOGIN_AGAIN, status: 200 };
     } catch (error) {
@@ -117,6 +182,7 @@ export class OutlookService {
         const response = await this.userEntity.deleteUser(userDetails.id);
         return response;
       }
+      return { message: MESSAGES.BAD_REQUEST, status: 400 };
     }
   }
 
@@ -126,11 +192,11 @@ export class OutlookService {
       userDetails = (await this.userEntity.getUserByEmail(email)) as unknown as IUser;
       if (userDetails) {
         const token = userDetails.accessToken;
-        const emailFoldersResponse: OutlookMailFoldersResponse =
+        const emailFoldersResponse: IOutlookMailFoldersResponse =
           await this.outlookBundleApis.getEmailFolders(token);
         const parsedEmailFolderResponse: IGenericMailFolderResponse =
-          this.parseMailFolderResponse(emailFoldersResponse);
-        this.syncMaileFolderResponse(parsedEmailFolderResponse, userDetails.id);
+          this.getParsedMailFoldersResponse(emailFoldersResponse);
+        this.syncParsedResponse(parsedEmailFolderResponse, userDetails.id, 'folders');
         return emailFoldersResponse;
       }
       return { message: MESSAGES.PLEASE_LOGIN_AGAIN, status: 200 };
@@ -141,6 +207,7 @@ export class OutlookService {
         await this.userEntity.deleteUser(userDetails.id);
         return { message: MESSAGES.PLEASE_LOGIN_AGAIN, status: 400 };
       }
+      return { message: MESSAGES.BAD_REQUEST, status: 400 };
     }
   }
 }

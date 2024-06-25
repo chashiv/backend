@@ -36,17 +36,25 @@ export class ElasticService {
     await axios.delete(`${this.elasticSearchUrl}/${index}/_doc/${id}`);
   }
 
-  async search(index: string, query: string, fields: string[] = []) {
+  async search(index: string, query?: string, fields: string[] = []) {
+    const body = query
+      ? {
+          query: {
+            multi_match: {
+              query: query || '',
+              fields: fields.length ? fields : ['_all'],
+            },
+          },
+        }
+      : {
+          query: {
+            match_all: {},
+          },
+        };
+
     const response = await this.esclient.search({
       index,
-      body: {
-        query: {
-          multi_match: {
-            query,
-            fields: fields.length ? fields : ['_all'],
-          },
-        },
-      },
+      body,
     });
     return response.hits.hits;
   }

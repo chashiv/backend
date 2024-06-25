@@ -8,17 +8,22 @@ import {
 import axios from 'axios';
 import { Injectable } from '@nestjs/common';
 import { LoggingService } from 'src/logger/logging.service';
-import { OutlookMailFoldersResponse } from './outlook.interface';
+import { IOutlookEmailListResponse, IOutlookMailFoldersResponse } from './outlook.interface';
 
 @Injectable()
 export class OutLookBundleApiService {
   constructor(private loggingService: LoggingService) {}
 
-  listMails = async (token: string) => {
+  listMails = async (
+    token: string,
+    count: boolean,
+    nextUrl?: string,
+  ): Promise<IOutlookEmailListResponse> => {
     try {
-      const emails = await axios.get(`${MICROSOFT_GRAPH_BASE_URL}/v1.0/me/messages`, {
+      const url = nextUrl ? nextUrl : `${MICROSOFT_GRAPH_BASE_URL}/v1.0/me/messages`;
+      const emails = await axios.get(url, {
         params: {
-          count: true,
+          ...(count && { count }),
         },
         headers: {
           Authorization: `Bearer ${token}`,
@@ -28,6 +33,7 @@ export class OutLookBundleApiService {
     } catch (error) {
       error = error?.response?.data || error;
       this.loggingService.logError(error.error_description || error.message, error);
+      throw new Error(error);
     }
   };
 
@@ -43,10 +49,11 @@ export class OutLookBundleApiService {
     } catch (error) {
       error = error?.response?.data || error;
       this.loggingService.logError(error.error_description || error.message, error);
+      throw new Error(error);
     }
   };
 
-  async getEmailFolders(token: string): Promise<OutlookMailFoldersResponse> {
+  async getEmailFolders(token: string): Promise<IOutlookMailFoldersResponse> {
     try {
       const emailFoldersResponse = await axios.get(`${MICROSOFT_GRAPH_BASE_URL}/v1.0/me/mailFolders`, {
         headers: {
@@ -57,6 +64,7 @@ export class OutLookBundleApiService {
     } catch (error) {
       error = error?.response?.data || error;
       this.loggingService.logError(error.error_description || error.message, error);
+      throw new Error(error);
     }
   }
 
@@ -99,6 +107,7 @@ export class OutLookBundleApiService {
     } catch (error) {
       error = error?.response?.data || error;
       this.loggingService.logError(error.error_description || error.message, error);
+      throw new Error(error);
     }
   };
 }

@@ -9,4 +9,5 @@ export const PERMISSIONS = 'openid offline_access User.Read User.ReadBasic.All M
 
 export enum MESSAGES {
   PLEASE_LOGIN_AGAIN = 'Please login again',
+  BAD_REQUEST = 'Bad Request',
 }
