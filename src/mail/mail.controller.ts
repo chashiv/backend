@@ -14,4 +14,11 @@ export class MailController {
     const response = await this.mailService.getEmailFolders(payload);
     return response;
   }
+
+  @Get('sync-mails')
+  @UsePipes(new JoiValidationPipe(getMailFoldersValidations))
+  async syncMails(@Body() payload: IProviderWithEmail) {
+    const response = await this.mailService.syncMails(payload);
+    return response;
+  }
 }

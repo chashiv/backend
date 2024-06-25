@@ -173,6 +173,7 @@ export class OutlookService {
             nextUrl = null;
           }
         }
+        return { message: MESSAGES.MAIL_SYNCING_SUCCESSFUL, status: 200 };
       }
       return { message: MESSAGES.PLEASE_LOGIN_AGAIN, status: 200 };
     } catch (error) {

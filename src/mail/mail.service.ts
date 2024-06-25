@@ -16,4 +16,13 @@ export class MailService {
         throw new HttpException(ProviderError.UNINTEGRATED_PROVIDER, HttpStatus.BAD_REQUEST);
     }
   }
+
+  async syncMails(payload: IProviderWithEmail) {
+    switch (payload.provider) {
+      case ProviderEnum.OUTLOOK:
+        return await this.outlookService.listMails(payload.email);
+      default:
+        throw new HttpException(ProviderError.UNINTEGRATED_PROVIDER, HttpStatus.BAD_REQUEST);
+    }
+  }
 }

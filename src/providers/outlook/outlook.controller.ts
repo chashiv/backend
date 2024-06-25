@@ -1,7 +1,5 @@
-import { Controller, Get, Query, Req, UsePipes } from '@nestjs/common';
+import { Controller, Get, Req } from '@nestjs/common';
 import { OutlookService } from './outlook.service';
-import { JoiValidationPipe } from 'src/pipes/joi.validation.pipe';
-import { listMailsValidation } from './outlook.validations';
 
 @Controller('outlook')
 export class OutlookController {
@@ -16,13 +14,6 @@ export class OutlookController {
   @Get('handleChangeNotification')
   async handleChangeNotification() {
     const response = await this.outlookService.handleChangeNotification();
-    return response;
-  }
-
-  @Get('list-mails')
-  @UsePipes(new JoiValidationPipe(listMailsValidation))
-  async listMails(@Query() query) {
-    const response = await this.outlookService.listMails(query.email);
     return response;
   }
 }
