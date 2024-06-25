@@ -11,7 +11,6 @@ services:
       - '8000:8000'
     volumes:
       - .:/app
-      - node_modules:/app/node_modules
     depends_on:
       - elasticsearch
 
@@ -36,4 +35,3 @@ services:
 
 volumes:
   data01:
-  node_modules:
