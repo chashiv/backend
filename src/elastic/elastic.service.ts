@@ -4,7 +4,6 @@ import * as elasticsearch from 'elasticsearch';
 import { ConfigService } from '@nestjs/config';
 import { Uuid } from '@elastic/elasticsearch/lib/api/types';
 import axios from 'axios';
-import { IUser } from 'src/user/user.interface';
 
 @Injectable()
 export class ElasticService {
@@ -25,7 +24,7 @@ export class ElasticService {
     await this.esclient.bulk({ body: processedDocuments });
   }
 
-  async insert(index: string, document: IUser, id: Uuid) {
+  async insert(index: string, document: Document, id: Uuid) {
     await axios.put(`${this.elasticSearchUrl}/${index}/_create/${id}`, document, {
       headers: {
         'Content-Type': 'application/json',

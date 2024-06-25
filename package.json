@@ -30,6 +30,7 @@
     "@types/elasticsearch": "^5.0.43",
     "@types/joi": "^17.2.3",
     "axios": "^1.7.2",
+    "crypto": "^1.0.1",
     "elasticsearch": "^16.7.3",
     "fs": "^0.0.1-security",
     "joi": "^17.13.3",

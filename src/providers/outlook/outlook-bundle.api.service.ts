@@ -8,6 +8,7 @@ import {
 import axios from 'axios';
 import { Injectable } from '@nestjs/common';
 import { LoggingService } from 'src/logger/logging.service';
+import { OutlookMailFoldersResponse } from './outlook.interface';
 
 @Injectable()
 export class OutLookBundleApiService {
@@ -45,7 +46,7 @@ export class OutLookBundleApiService {
     }
   };
 
-  getEmailFolders = async (token: string) => {
+  async getEmailFolders(token: string): Promise<OutlookMailFoldersResponse> {
     try {
       const emailFoldersResponse = await axios.get(`${MICROSOFT_GRAPH_BASE_URL}/v1.0/me/mailFolders`, {
         headers: {
@@ -57,7 +58,7 @@ export class OutLookBundleApiService {
       error = error?.response?.data || error;
       this.loggingService.logError(error.error_description || error.message, error);
     }
-  };
+  }
 
   getAuthorisationUrl = (clientId: string, redirectUrl: string) => {
     return (

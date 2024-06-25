@@ -7,17 +7,24 @@ import { IUser } from 'src/user/user.interface';
 import { LoggingService } from 'src/logger/logging.service';
 import * as moment from 'moment';
 import { MESSAGES } from './outlook.enum';
+import { ElasticService } from 'src/elastic/elastic.service';
+import { UtilService } from 'src/common/util/util.service';
+import { IGenericMailFolderResponse } from 'src/mail/mail.interface';
+import { OutlookMailFoldersResponse } from './outlook.interface';
 
 @Injectable()
 export class OutlookService {
   private readonly clientId: string;
-  private readonly clientSecret: string;
   private readonly redirectUrl: string;
+  private readonly clientSecret: string;
+  private readonly outlook: string = 'outlook';
 
   constructor(
     private userEntity: UserEntity,
+    private utilService: UtilService,
     private configService: ConfigService,
     private loggingService: LoggingService,
+    private elasticSearchService: ElasticService,
     private outlookBundleApis: OutLookBundleApiService,
   ) {
     this.clientId = this.configService.getOrThrow<string>('OUTLOOK_CLIENT_ID');
@@ -42,6 +49,26 @@ export class OutlookService {
       expiryTimestamp: moment().add(3600, 'seconds').toDate(),
       email: userDetails?.mail || userDetails?.userPrincipalName,
     };
+  }
+
+  private getIndex = (userId: string, suffix: string) => {
+    return `${this.outlook}-${userId}-${suffix}`;
+  };
+
+  private parseMailFolderResponse = (mailFolderResponse: OutlookMailFoldersResponse) => {
+    const mailFoldersByIdAndName: Record<string, any> = {};
+    mailFolderResponse.value.forEach((response) => {
+      mailFoldersByIdAndName[this.utilService.shortenString(response.id)] = response?.displayName;
+    });
+    return mailFoldersByIdAndName;
+  };
+
+  private async syncMaileFolderResponse(
+    parsedMailFolderResponse: IGenericMailFolderResponse,
+    userId: string,
+  ) {
+    const userIdIndex = this.getIndex(userId, 'folders');
+    await this.elasticSearchService.insert(userIdIndex, parsedMailFolderResponse, userId);
   }
 
   async authenticate() {
@@ -99,16 +126,20 @@ export class OutlookService {
       userDetails = (await this.userEntity.getUserByEmail(email)) as unknown as IUser;
       if (userDetails) {
         const token = userDetails.accessToken;
-        const emailFolders = await this.outlookBundleApis.getEmailFolders(token);
-        return emailFolders;
+        const emailFoldersResponse: OutlookMailFoldersResponse =
+          await this.outlookBundleApis.getEmailFolders(token);
+        const parsedEmailFolderResponse: IGenericMailFolderResponse =
+          this.parseMailFolderResponse(emailFoldersResponse);
+        this.syncMaileFolderResponse(parsedEmailFolderResponse, userDetails.id);
+        return emailFoldersResponse;
       }
       return { message: MESSAGES.PLEASE_LOGIN_AGAIN, status: 200 };
     } catch (error) {
       error = error?.response?.data || error;
       this.loggingService.logError(error.message, error);
       if (userDetails) {
-        const response = await this.userEntity.deleteUser(userDetails.id);
-        return response;
+        await this.userEntity.deleteUser(userDetails.id);
+        return { message: MESSAGES.PLEASE_LOGIN_AGAIN, status: 400 };
       }
     }
   }

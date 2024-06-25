@@ -5,9 +5,17 @@ import { LoggingService } from 'src/logger/logging.service';
 import { ElasticService } from 'src/elastic/elastic.service';
 import { OutLookBundleApiService } from './outlook-bundle.api.service';
 import { UserEntity } from 'src/user/user.entity';
+import { UtilService } from 'src/common/util/util.service';
 
 @Module({
-  providers: [OutlookService, LoggingService, ElasticService, OutLookBundleApiService, UserEntity],
+  providers: [
+    OutlookService,
+    LoggingService,
+    ElasticService,
+    OutLookBundleApiService,
+    UserEntity,
+    UtilService,
+  ],
   exports: [OutlookService],
   controllers: [OutlookController],
 })
