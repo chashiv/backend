@@ -4,6 +4,7 @@ import * as elasticsearch from 'elasticsearch';
 import { ConfigService } from '@nestjs/config';
 import { Uuid } from '@elastic/elasticsearch/lib/api/types';
 import axios from 'axios';
+import { IUser } from 'src/user/user.interface';
 
 @Injectable()
 export class ElasticService {
@@ -12,9 +13,7 @@ export class ElasticService {
 
   constructor(private configService: ConfigService) {
     this.elasticSearchUrl = this.configService.getOrThrow<string>('ELASTIC_SEARCH_URL');
-    this.esclient = new elasticsearch.Client({
-      host: this.elasticSearchUrl,
-    });
+    this.esclient = new elasticsearch.Client({ host: this.elasticSearchUrl });
   }
 
   async createIndex(index: string) {
@@ -26,11 +25,87 @@ export class ElasticService {
     await this.esclient.bulk({ body: processedDocuments });
   }
 
-  async insert(index: string, document: Document, id: Uuid) {
-    await axios.put(
-      `${this.elasticSearchUrl}/${index}/_create/${id}`,
+  async insert(index: string, document: IUser, id: Uuid) {
+    await axios.put(`${this.elasticSearchUrl}/${index}/_create/${id}`, document, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+
+  async delete(index: string, id: Uuid) {
+    await axios.delete(`${this.elasticSearchUrl}/${index}/_doc/${id}`);
+  }
+
+  async search(index: string, query: string, fields: string[] = []) {
+    const response = await this.esclient.search({
+      index,
+      body: {
+        query: {
+          multi_match: {
+            query,
+            fields: fields.length ? fields : ['_all'],
+          },
+        },
+      },
+    });
+    return response.hits.hits;
+  }
+
+  async exactSearch(index: string, field: string, value: string) {
+    const response = await this.esclient.search({
+      index,
+      body: {
+        query: {
+          term: {
+            [field]: value,
+          },
+        },
+      },
+    });
+    return response.hits.hits;
+  }
+
+  async searchByFields(index: string, queries: { [field: string]: string }) {
+    const mustQueries = Object.entries(queries).map(([field, value]) => ({
+      match: { [field]: value },
+    }));
+    const response = await this.esclient.search({
+      index,
+      body: {
+        query: {
+          bool: {
+            must: mustQueries,
+          },
+        },
+      },
+    });
+    return response.hits.hits;
+  }
+
+  async paginatedSearch(index: string, query: string, from: number = 0, size: number = 10) {
+    const response = await this.esclient.search({
+      index,
+      body: {
+        from,
+        size,
+        query: {
+          multi_match: {
+            query,
+            fields: ['_all'],
+          },
+        },
+      },
+    });
+    return response.hits.hits;
+  }
+
+  async update(index: string, id: Uuid, upsertDocument: Document, document: Document) {
+    await axios.post(
+      `${this.elasticSearchUrl}/${index}/_update/${id}`,
       {
-        ...document,
+        doc: document,
+        upsert: upsertDocument,
       },
       {
         headers: {
@@ -38,27 +113,5 @@ export class ElasticService {
         },
       },
     );
-  }
-
-  async delete(index: string, id: Uuid) {
-    try {
-      console.log(index, id);
-      const response = await axios.delete(`${this.elasticSearchUrl}/${index}/_doc/${id}`);
-      console.log(response);
-    } catch (error) {}
-  }
-
-  async search(index: string, text: string) {
-    const response = await this.esclient.search({
-      index,
-      body: {
-        query: {
-          bool: {
-            should: [{ term: { userPrincipalName: text } }, { term: { mail: text } }],
-          },
-        },
-      },
-    });
-    return response?.hits?.hits;
   }
 }

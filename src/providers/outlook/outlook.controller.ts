@@ -9,7 +9,7 @@ export class OutlookController {
 
   @Get('callback')
   async handleOutlookCallback(@Req() req) {
-    const response = await this.outlookService.handleCallback(req);
+    const response = await this.outlookService.handleCallback(req?.query?.code);
     return response;
   }
 
